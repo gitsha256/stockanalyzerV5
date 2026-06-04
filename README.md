@@ -221,6 +221,9 @@ The formatter is designed to turn raw CSV data into a visually intuitive heat-ma
 - **Light Red (#FFC7CE)**: Bearish / Signal Inactive.
 - **Dark Fills with White Text**: Highlights extreme conditions (e.g., very close to or far from 52W Highs).
 
+## Updater folder
+ Dont use updater folder its in developing/testing phase....
+
 ## 📋 Requirements
 
 - Python 3.12+
