@@ -245,7 +245,7 @@ def build_candidates(snap: pd.DataFrame, sectors: pd.DataFrame) -> tuple:
 
     # ── Final output columns ──
     keep = []
-    for col in ['date', 'symb', sect_col, 'RRG Quadrant', 'Rotational Score', 'RS-Ratio', 'RS-Momentum',
+    for col in ['date', 'symb', sect_col, 'RRG Quadrant', 'Rotational Score', 'RS-Ratio', 'RS-Momentum', 'MT_Zone',
                 'clos', 'rsi', 'adx', 'stge', 'rvol', 'DlPer',
                 'g200', 'g050', 'zone', 'obv',
                 'mpat', 'pcon', 'patt', 'pat_bullish',

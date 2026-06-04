@@ -94,14 +94,14 @@ SWING_CFG = {
 OUTPUT_COLS_INTRADAY = [
     "symb", "clos", "chan", "rvol", "arnk", "ascr",
     "rsi", "adx", "tren", "tstr", "vola",
-    "zone", "MT_Zone", "delt", "bbup", "bbsq",
+    "zone", "delt", "bbup", "bbsq",
     "SUPERTd_7_3.0", "CMF_20", "SQZ_ON", "STOCHk_14_3_3", "EFI_13",
     "mpat", "pcon", "sect", "score",
 ]
 
 OUTPUT_COLS_SWING = [
     "symb", "clos", "chan", "wrsi", "ws30", "DlPer",
-    "delt", "adx", "tstr", "vola", "zone", "MT_Zone",
+    "delt", "adx", "tstr", "vola", "zone",
     "SUPERTd_7_3.0", "CMF_20", "SQZ_ON", "WILLR_14", "EMA_21",
     "STOCHk_14_3_3",
     "mpat", "pcon", "xpat", "sect", "score",
@@ -120,7 +120,7 @@ def load_csv(path: str) -> pd.DataFrame:
     required = {
         "stge", "g200", "g050", "rsi", "wrsi", "adx", "rvol",
         "ascr", "chan", "tren", "tstr", "vola", "zone", "delt",
-        "DlPer", "bbup", "bbsq", "bbbw", "mpat", "pcon", "ws30", "clos", "sect", "MT_Zone"
+        "DlPer", "bbup", "bbsq", "bbbw", "mpat", "pcon", "ws30", "clos", "sect",
     }
     missing = required - set(df.columns)
     if missing:
@@ -222,7 +222,7 @@ def screen_intraday(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
         (pool["bbup"] == True).astype(int)       * c["w_bbbreakout"]
     )
 
-    # ── EMA21 Distance Scoring ──
+    # ── EMA21 Distance Scoring (Mod 1) ──
     if "EMA_21" in pool.columns:
         ema_dist = ((pool["clos"] - pool["EMA_21"]) / pool["EMA_21"]) * 100
         pool["score"] += np.select(
@@ -232,19 +232,19 @@ def screen_intraday(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
                 (ema_dist > 10) & (ema_dist <= 15),
                 (ema_dist > 15)
             ],
-            [10.0, 5.0, 0.0, -10.0],
+            [10.0, 5.0, 0.0, -10.0], # Strong, Med, Neutral, Penalty
             default=0
         )
 
-    # ── Multi-Timeframe Alignment ──
+    # ── Multi-Timeframe Alignment (Mod 5) ──
     mtf_mask = (pool["rsi"] > 55) & (pool.get("wrsi", 0) > 60)
     pool["score"] += mtf_mask.astype(int) * c["w_mtf_align"]
 
-    # ── Low BBBW Reward (Volatility Contraction) ──
+    # ── Low BBBW Reward (Mod 3) ──
     if "bbbw" in pool.columns:
         pool["score"] += (0.2 - pool["bbbw"]).clip(lower=0) * c["w_bbbw_low"]
 
-    # ── Weak Trend Penalty ──
+    # ── Weak Trend Penalty (Mod 6) ──
     pool["score"] += (pool["tstr"] == "Weak").astype(int) * c["w_weak_penalty"]
 
     # ── new indicator scores ──
@@ -320,7 +320,7 @@ def screen_swing(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
         np.log1p(pool["ascr"])                                     * c["w_ascr_log"]
     )
 
-    # ── Tiered Delivery % Scoring ──
+    # ── Tiered Delivery % Scoring (Mod 4) ──
     pool["score"] += np.select(
         [
             pool["DlPer"] >= 80,
@@ -332,7 +332,7 @@ def screen_swing(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
         default=0
     )
 
-    # ── EMA21 Distance Scoring ──
+    # ── EMA21 Distance Scoring (Mod 1) ──
     if "EMA_21" in pool.columns:
         ema_dist = ((pool["clos"] - pool["EMA_21"]) / pool["EMA_21"]) * 100
         pool["score"] += np.select(
@@ -346,15 +346,15 @@ def screen_swing(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
             default=0
         )
 
-    # ── Low BBBW Reward ──
+    # ── Low BBBW Reward (Mod 3) ──
     if "bbbw" in pool.columns:
         pool["score"] += (0.15 - pool["bbbw"]).clip(lower=0) * c["w_bbbw_low"]
 
-    # ── Multi-Timeframe Alignment ──
+    # ── Multi-Timeframe Alignment (Mod 5) ──
     mtf_mask = (pool["rsi"] > 55) & (pool["wrsi"] > 60)
     pool["score"] += mtf_mask.astype(int) * c["w_mtf_align"]
 
-    # ── Weak Trend Penalty ──
+    # ── Weak Trend Penalty (Mod 6) ──
     pool["score"] += (pool["tstr"] == "Weak").astype(int) * c["w_weak_penalty"]
 
     # ── new indicator scores ──
@@ -373,7 +373,7 @@ def screen_swing(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
     if "EMA_21" in pool.columns:
         pool["score"] += (pool["clos"] > pool["EMA_21"]).astype(int) * c["w_ema21_support"]
 
-    # ── RSI_2 Pullback Bonus ──
+    # ── RSI_2 Pullback Bonus (Mod 2) ──
     if "RSI_2" in pool.columns:
         pullback_mask = (pool["RSI_2"] < 25) & (pool["stge"].str.contains("Stage 2", na=False)) & \
                         (pool["tstr"].isin(["Strong", "Moderate"]))
@@ -485,7 +485,7 @@ def apply_professional_formatting(file_path, df):
         ("tren", {"Uptrend": green_fill, "Downtrend": red_fill, "Sideways": yellow_fill}),
         ("tstr", {"Strong": green_fill, "Weak": red_fill, "Moderate": yellow_fill}),
         ("zone", {
-            "Premium": red_fill,
+            "Premium": red_fill, 
             "Discount": green_fill, 
             "Equilibrium": yellow_fill,
             "Near Discount": f_dark_green,
@@ -495,13 +495,6 @@ def apply_professional_formatting(file_path, df):
             "Stage 2 (Uptrend)": green_fill,
             "Stage 4 (Downtrend)": red_fill,
             "Stage 1/3 (Neutral)": yellow_fill
-        }),
-        ("MT_Zone", {
-            "Premium": red_fill,
-            "Discount": green_fill,
-            "Equilibrium": yellow_fill,
-            "Near Discount": f_dark_green,
-            "Near Premium": f_dark_red
         }),
         ("screener_type", {"Intraday": blue_fill, "Swing": PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')})
     ]:

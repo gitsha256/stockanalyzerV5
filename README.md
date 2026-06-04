@@ -14,6 +14,7 @@ A comprehensive, institutional-grade technical analysis suite for the National S
 | `formatter.py` | **The Visualization Engine.** Converts snapshots to professional multi-sheet Excel reports with automated heat-mapping. |
 | `analyzerall.py` | Full-market version of the analyzer. Processes a larger set of symbols from `symbolsall.csv`. |
 | `screen_stocks.py` | **The Ranking Engine.** Applies multi-weighted scoring algorithms to produce top-tier Intraday and Weekly Swing candidates. |
+| `test_screen_stocks.py` | **The Sandbox Engine.** Experimental version of the screener used to test quality-of-entry improvements (EMA distance, pullbacks, contraction) before deployment. |
 | `sma_filter.py` | Utility to find stocks where multiple SMAs (20, 50, 100, 200) are converging (volatility confluence). |
 | `montecarlo.py` | **Risk Management.** Fetches live Nifty/VIX data to provide position sizing and Monte Carlo price simulations for professional options trading. |
 
@@ -40,6 +41,10 @@ V5 places `sectoralanalysis.py` at the heart of the workflow. It acts as the "Br
 ## 📈 V5 Structural Analysis Features
 The analyzer now performs deep structural scans:
 - **Weinstein Stages**: Automatically classifies stocks into Stage 1 (Base), Stage 2 (Uptrend), Stage 3 (Top), or Stage 4 (Downtrend).
+- **Dual-Zone Analysis**: V5 provides two distinct structural positioning layers to evaluate risk-to-reward:
+    - **Long-Term Zone (ZONE)**: Calculated using `order=252` anchors (52-week extremes).
+    - **Medium-Term Zone (MT_Zone)**: Calculated using `order=60` anchors to reflect the stock's position within the most recent ~3 month swing structure.
+    - Both utilize adaptive percentile logic (Discount, Equilibrium, Premium) to normalize positioning across different stock volatilities.
 - **Pattern Engine**: Detects complex patterns including Cup and Handle, Rounding Bottoms, Wedges, Channels, and Triangles using multi-timeframe pivot analysis.
 
 ## 📊 Abbreviation Dictionary
@@ -84,6 +89,7 @@ The analysis outputs (e.g., `29-05-26snapshot_all.csv`) use the following column
 - **tren**: Trend Direction (Uptrend, Sideways, Downtrend).
 - **tstr**: Trend Strength (Strong, Moderate, Weak).
 - **zone**: Price Location (Premium, Near Premium, Equilibrium, Near Discount, Discount).
+- **MT_Zone**: Medium-term Price Location (position within the recent 60-day swing range).
 - **vrnk / rrnk**: Volume Rank and Relative Volume Rank.
 - **delt**: Percentage distance currently below the 52-week high.
 - **h52h / l52l**: 52-Week High and Low prices.
@@ -146,8 +152,8 @@ Run               : python screen_stocks.py [path/to/snapshot.csv]
 
 | Mode | Primary Hard Filters | Key Scoring Weights |
 | :--- | :--- | :--- |
-| **Intraday** | Stage 2, RSI 45-72, ADX > 18, RVol > 0.8 | RVol (25), ADX (1.5), logAscr (5.0), CMF (8.0) |
-| **Swing** | Stage 2, wRSI 50-75, Delivery > 35%, ADX > 18 | Strong Trend (15), BB Squeeze (10), Supertrend (12), CMF (10) |
+| **Intraday** | Stage 2, RSI 45-72, ADX > 18, RVol > 0.8 | RVol (25), logAscr (5.0), BBBW Contraction (15), EMA21 Proximity Bonus |
+| **Swing** | Stage 2, wRSI 50-75, Delivery > 35%, ADX > 18 | Strong Trend (15), BB Squeeze (10), RSI2 Pullback Bonus, Tiered Delivery Scoring |
 
 ### 🟢 Excel Formatting (`formatter.py`)
 The formatter is designed to turn raw CSV data into a visually intuitive heat-map of market signals. It processes snapshots and applies conditional formatting based on institutional technical consensus.

@@ -71,7 +71,8 @@ def colorize_snapshot(csv_path):
             ["delt", "<= 7%", "Light Red", "Near 52W High (Mean Reversion Risk)"],
             ["zone", "Premium", "Dark Red", "Overbought Highs (Mean Reversion Risk)"],
             ["zone", "Near Discount", "Dark Green", "Accumulation Zone (Near Support)"],
-            ["zone", "Equilibrium", "Yellow", "Mid-range Consolidation"]
+            ["zone", "Equilibrium", "Yellow", "Mid-range Consolidation"],
+            ["MT_Zone", "Percentile Position", "Same as zone", "Position within the 60-day swing structure"]
         ]
         pd.DataFrame(legend_data).to_excel(writer, sheet_name='Legend', index=False, header=False)
 
@@ -143,6 +144,13 @@ def colorize_snapshot(csv_path):
         ("tstr", {"Strong": GREEN_FILL, "Weak": RED_FILL, "Moderate": YELLOW_FILL}),
         ("vtrd", {"Increasing": GREEN_FILL, "Decreasing": RED_FILL}),
         ("zone", {
+            "Premium": RED_FILL, 
+            "Discount": GREEN_FILL,
+            "Equilibrium": YELLOW_FILL,
+            "Near Discount": DARK_GREEN_FILL,
+            "Near Premium": DARK_RED_FILL
+        }),
+        ("MT_Zone", {
             "Premium": RED_FILL, 
             "Discount": GREEN_FILL,
             "Equilibrium": YELLOW_FILL,

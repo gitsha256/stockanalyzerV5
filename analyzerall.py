@@ -1137,6 +1137,14 @@ def analyze_symbol(symbol, logger, enable_chart_patterns=True):
         data.iloc[high_idx, data.columns.get_loc('SWING_HIGH')] = 1
         data.iloc[low_idx, data.columns.get_loc('SWING_LOW')] = 1
 
+        # Medium-term swings (order=60 anchors)
+        data['MT_SWING_HIGH'] = 0
+        data['MT_SWING_LOW'] = 0
+        mt_high_idx = argrelextrema(data['close'].values, np.greater_equal, order=60)[0]
+        mt_low_idx = argrelextrema(data['close'].values, np.less_equal, order=60)[0]
+        data.iloc[mt_high_idx, data.columns.get_loc('MT_SWING_HIGH')] = 1
+        data.iloc[mt_low_idx, data.columns.get_loc('MT_SWING_LOW')] = 1
+
         data['AVG_VOLUME_20'] = data['volume'].rolling(window=20, min_periods=1).mean()
         data['RELATIVE_VOLUME'] = data['volume'] / data['AVG_VOLUME_20']
         data['VOLUME_SPIKE'] = data['RELATIVE_VOLUME'] > 2
@@ -1171,13 +1179,33 @@ def analyze_symbol(symbol, logger, enable_chart_patterns=True):
         close = latest['close']
         swing_high = data[data['SWING_HIGH'] == 1]['close'].iloc[-1] if not data[data['SWING_HIGH'] == 1].empty else np.nan
         swing_low = data[data['SWING_LOW'] == 1]['close'].iloc[-1] if not data[data['SWING_LOW'] == 1].empty else np.nan
-        midpoint = (swing_high + swing_low) / 2 if pd.notna(swing_high) and pd.notna(swing_low) else np.nan
-        zone = "NO DATA" if pd.isna(midpoint) or pd.isna(close) else (
-            "Equilibrium" if abs(close - midpoint) / midpoint <= 0.05 else
-            "Discount" if abs(close - swing_low) / swing_low <= 0.03 else
-            "Premium" if abs(close - swing_high) / swing_high <= 0.03 else
-            "Near Premium" if close > midpoint else "Near Discount"
-        )
+
+        # Better Zone Logic: Percentile-based (adapts to stock volatility)
+        if pd.isna(swing_high) or pd.isna(swing_low) or swing_high == swing_low:
+            zone = "NO DATA"
+            midpoint = np.nan
+        else:
+            midpoint = (swing_high + swing_low) / 2
+            rel_pos = (close - swing_low) / (swing_high - swing_low)
+            if 0.45 <= rel_pos <= 0.55: zone = "Equilibrium"
+            elif rel_pos <= 0.25:      zone = "Discount"
+            elif rel_pos >= 0.75:      zone = "Premium"
+            elif rel_pos < 0.50:       zone = "Near Discount"
+            else:                      zone = "Near Premium"
+        
+        # Medium-term Zone Logic (order=60 anchors)
+        mt_swing_high = data[data['MT_SWING_HIGH'] == 1]['close'].iloc[-1] if not data[data['MT_SWING_HIGH'] == 1].empty else np.nan
+        mt_swing_low = data[data['MT_SWING_LOW'] == 1]['close'].iloc[-1] if not data[data['MT_SWING_LOW'] == 1].empty else np.nan
+
+        if pd.isna(mt_swing_high) or pd.isna(mt_swing_low) or mt_swing_high == mt_swing_low:
+            mt_zone = "NO DATA"
+        else:
+            mt_rel_pos = (close - mt_swing_low) / (mt_swing_high - mt_swing_low)
+            if 0.45 <= mt_rel_pos <= 0.55: mt_zone = "Equilibrium"
+            elif mt_rel_pos <= 0.25:      mt_zone = "Discount"
+            elif mt_rel_pos >= 0.75:      mt_zone = "Premium"
+            elif mt_rel_pos < 0.50:       mt_zone = "Near Discount"
+            else:                      mt_zone = "Near Premium"
         
         candle = None
         more_candles = None
@@ -1212,7 +1240,7 @@ def analyze_symbol(symbol, logger, enable_chart_patterns=True):
             'datetime': latest['datetime'], 'symbols': symbol, 'close': round(close, 2), 'volume': latest['volume'],
             'Dl Per': round(latest['delivery_perc'], 2) if 'delivery_perc' in latest else np.nan,
             'CHANGE': round(latest['Change'], 2), 'SMA_200': round(latest['SMA_200'], 2),
-            'ZONE': zone, 'RSI': round(latest['RSI'], 2), 'delta': per,
+            'ZONE': zone, 'MT_ZONE': mt_zone, 'RSI': round(latest['RSI'], 2), 'delta': per,
             '>200': above_sma_200, '>50': above_sma_50, '>20': above_sma_20,
             'OBV': round(latest['OBV'], 2), 'VOLUME_TREND': vol_trend, 'ADX': round(latest['ADX'], 2),
             'CMF_20': round(latest['CMF_20'], 2) if 'CMF_20' in latest else np.nan,
@@ -1304,7 +1332,7 @@ def perform_technical_analysis(df_input, sector_df, logger, enable_chart_pattern
         col_map = {
             'datetime': 'date', 'symbols': 'symb', 'close': 'clos', 'volume': 'volu',
             'Dl Per': 'DlPer', 'RELATIVE_VOLUME': 'rvol', 'VOLUME_SPIKE': 'vspk', 'ACTIVITY_SCORE': 'ascr',
-            'ACTIVITY_RANK': 'arnk', 'CHANGE': 'chan', '>200': 'g200', 'ZONE': 'zone', 'RSI': 'rsi',
+            'ACTIVITY_RANK': 'arnk', 'CHANGE': 'chan', '>200': 'g200', 'ZONE': 'zone', 'MT_ZONE': 'MT_Zone', 'RSI': 'rsi',
             'delta': 'delt', 'OBV': 'obv', 'BB_BREAKOUT_UP': 'bbup', 'VOLUME_TREND': 'vtrd',
             'BB_BANDWIDTH': 'bbbw', '>50': 'g050', '>20': 'g020', 'ADX': 'adx',
             'open': 'open', 'BB_BREAKOUT_DOWN': 'bbdn', 'BB_SQUEEZE': 'bbsq', 'S_HIGH': 'shgh', 'S_LOW': 'slw',
@@ -1319,7 +1347,7 @@ def perform_technical_analysis(df_input, sector_df, logger, enable_chart_pattern
         analysis_df.rename(columns={k: v for k, v in col_map.items() if k in analysis_df.columns}, inplace=True)
         
         desired_order = [
-            'date','symb','clos','stge','wrsi','ws30','volu','DlPer','rvol','vspk','ascr','arnk','chan','g200','zone','rsi','delt','bbup','vtrd','bbbw','bbsq',
+            'date','symb','clos','stge','wrsi','ws30','volu','DlPer','rvol','vspk','ascr','arnk','chan','g200','zone', 'MT_Zone', 'rsi','delt','bbup','vtrd','bbbw','bbsq',
             'g050','g020','adx','CMF_20','SUPERT_7_3.0','SUPERTd_7_3.0','STOCHk_14_3_3','STOCHd_14_3_3','EMA_21','SQZ_ON','SQZ_OFF','SQZ_NO','WILLR_14','EFI_13','RSI_2','open','bbdn','shgh','slw','high','low','eqb','s020','s050','s100','s200','h52h','l52l','vrnk','rrnk',
             'tren','tstr','vola','mpat','pcon','psta','pend','ppnt','xpat','patt','obv','sect'
         ]
