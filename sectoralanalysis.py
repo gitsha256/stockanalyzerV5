@@ -57,9 +57,13 @@ def get_sector_rankings(snap: pd.DataFrame, snapshot_path: str) -> pd.DataFrame:
     
     # Get Benchmark
     print("   Fetching Nifty 50 benchmark...")
-    bench = yf.download("^NSEI", period="1y", progress=False)['Close']
-    if isinstance(bench, pd.DataFrame): bench = bench.squeeze()
-    bench.index = pd.to_datetime(bench.index).tz_localize(None)
+    try:
+        bench = yf.download("^NSEI", period="1y", progress=False)['Close']
+        if isinstance(bench, pd.DataFrame): bench = bench.squeeze()
+        bench.index = pd.to_datetime(bench.index).tz_localize(None)
+    except Exception as e:
+        print(f"   ⚠️ Benchmark fetch failed: {e}. Falling back to synthetic market benchmark.")
+        bench = sector_prices.mean(axis=1)
 
     # Create sector mapping and filter history
     sector_map = snap.set_index('symb')['sect'].to_dict()
@@ -190,7 +194,9 @@ def build_candidates(snap: pd.DataFrame, sectors: pd.DataFrame) -> tuple:
 
     # ── Above SMA200 ──
     if 'g200' in df.columns:
-        df = df[pd.to_numeric(df['g200'], errors='coerce').fillna(-999) > 0]
+        # Coerce "True"/"False" strings to actual booleans
+        g200_mask = df['g200'].map(lambda x: True if str(x).strip().lower() in ("true", "1", "yes") else False)
+        df = df[g200_mask]
         steps["Filter - SMA200"] = df[[c for c in [symb_col, sect_col, 'g200'] if c]].copy()
     print(f"   After SMA200 filter    : {len(df)}")
 
@@ -356,7 +362,8 @@ def main():
     today = datetime.now().strftime("%d-%b-%Y")
     print(f"✅ {len(candidates)} candidates saved and styled.")
     print(f"\n🏆 Top 10 — {today}:")
-    print(candidates[['symb', sect_col if (sect_col := 'sect') else 'sect',
+    sect_col = 'sect'
+    print(candidates[['symb', sect_col,
                        'RRG Quadrant', 'Rotational Score',
                        'clos', 'rsi', 'adx', 'mpat']].head(10).to_string(index=False))
     print("\n" + "="*60)

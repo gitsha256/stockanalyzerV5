@@ -475,7 +475,7 @@ def apply_professional_formatting(file_path, df):
     # SUPERT_7_3.0 Trend Strength Mapping
     s_let, s_ref = get_col_let("SUPERT_7_3.0"), get_col_ref("SUPERT_7_3.0")
     if c_let and s_let and s_ref:
-        dist = f"((${c_let}2-${s_let}2)/${s_let}2)*100"
+        dist = f"((${c_let}2-${s_let}2)/${s_let}2)*100" # relative row ref (2 without $)
         ws.conditional_formatting.add(s_ref, FormulaRule(formula=[f"{dist}>5"], fill=f_blue, font=Font(color='FFFFFF')))
         ws.conditional_formatting.add(s_ref, FormulaRule(formula=[f"AND({dist}>2,{dist}<=5)"], fill=f_dark_green, font=Font(color='FFFFFF')))
         ws.conditional_formatting.add(s_ref, FormulaRule(formula=[f"AND({dist}>0,{dist}<=2)"], fill=green_fill))
@@ -634,9 +634,8 @@ def main():
     swing_tagged    = swing_results.assign(screener_type="Swing")
     combined_df = pd.concat([intraday_tagged, swing_tagged], ignore_index=True)
 
-    combined_df.to_csv(os.path.join(out_dir, f"{base_name}.csv"), index=False)
     apply_professional_formatting(os.path.join(out_dir, f"{base_name}.xlsx"), combined_df)
-    print(f"\n[INFO] Results saved → {base_name}.csv and {base_name}.xlsx (Formatted)")
+    print(f"\n[INFO] Results saved → {base_name}.xlsx (Formatted)")
 
 
 if __name__ == "__main__":

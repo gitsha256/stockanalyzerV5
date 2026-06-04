@@ -340,7 +340,7 @@ def detect_splits(symbol_data, logger):
             if pd.isna(prev) or pd.isna(curr):
                 continue
             ratio = prev / curr
-            if 1.5 <= ratio <= 10:
+            if 1.5 <= ratio <= 12:
                 splits.append({
                     'symbols': symbol_data['symbols'].iloc[0],
                     'SPLIT_DATE': symbol_data['datetime'].iloc[idx],

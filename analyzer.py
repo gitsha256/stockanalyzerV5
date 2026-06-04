@@ -314,7 +314,7 @@ def detect_splits(symbol_data, logger):
             if pd.isna(prev) or pd.isna(curr):
                 continue
             ratio = prev / curr
-            if 1.5 <= ratio <= 10:
+            if 1.5 <= ratio <= 12:
                 splits.append({
                     'symbols': symbol_data['symbols'].iloc[0],
                     'SPLIT_DATE': symbol_data['datetime'].iloc[idx],
@@ -581,14 +581,13 @@ def _detect_channel(recent, highs, lows, min_gap=2, min_span=12):
     lx, ly = zip(*l_sorted)
     hm, hc = np.polyfit(hx, hy, 1)
     lm, lc = np.polyfit(lx, ly, 1)
+    
+    # Vectorized boundary violation check
+    idx_arr = np.arange(start_idx, len(c))
+    upper_bounds = (hm * idx_arr + hc) * 1.05
+    lower_bounds = (lm * idx_arr + lc) * 0.95
+    violations = np.sum((c[start_idx:] > upper_bounds) | (c[start_idx:] < lower_bounds))
 
-    violations = 0
-    for i in range(start_idx, len(c)):
-        upper = hm * i + hc
-        lower = lm * i + lc
-        # Increased tolerance to 5% and allowed for minor violations (wicks/spikes)
-        if c[i] > upper * 1.05 or c[i] < lower * 0.95:
-            violations += 1
     if violations > (len(c) - start_idx) * 0.15: # Allow 15% of bars to deviate
         return None
 
@@ -633,12 +632,13 @@ def _detect_wedge(recent, highs, lows, min_gap=2, min_span=12):
     lx, ly = zip(*l_sorted)
     hm, hc = np.polyfit(hx, hy, 1)
     lm, lc = np.polyfit(lx, ly, 1)
-    violations = 0
-    for i in range(start_idx, len(c)):
-        upper = hm * i + hc
-        lower = lm * i + lc
-        if c[i] > upper * 1.05 or c[i] < lower * 0.95:
-            violations += 1
+    
+    # Vectorized boundary violation check
+    idx_arr = np.arange(start_idx, len(c))
+    upper_bounds = (hm * idx_arr + hc) * 1.05
+    lower_bounds = (lm * idx_arr + lc) * 0.95
+    violations = np.sum((c[start_idx:] > upper_bounds) | (c[start_idx:] < lower_bounds))
+
     if violations > (len(c) - start_idx) * 0.15:
         return None
 
