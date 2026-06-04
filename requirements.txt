@@ -1,0 +1,15 @@
+pandas
+numpy
+yfinance
+openpyxl
+<<<<<<< HEAD
+requests
+python-dotenv
+nselib
+tqdm
+scipy
+pandas-ta
+=======
+pyarrow
+
+>>>>>>> 635eaf254174c2504dd986d1ffec41e3c3e05c2c
