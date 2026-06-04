@@ -5,8 +5,38 @@ A comprehensive, institutional-grade technical analysis suite for the National S
 # run requirements
 `pip install -r requirements.txt`
 
-## 🚀 Project Components
+## 🚀 Quick Start Guide (Setup & Workflow)
+Follow this step-by-step guide to go from a fresh clone to your first trade picks.
 
+### 1. Environment Setup
+Open your terminal (PowerShell or CMD) and run:
+```bash
+# Move into the project directory
+cd stockanalyzerV5
+
+# Create and activate a virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1  # Windows
+
+# Install all required libraries
+pip install -r requirements.txt
+```
+
+### 2. The Data Core Flow (`analyzer.py` or `analyzerall.py`)
+Start the core engine to build your database. Use `analyzer.py` for the Nifty 500 or `analyzerall.py` for the broader market.
+1.  **Run Fetch (Mode 1)**: Run this once to download historical data for your chosen range. This generates `raw_data.csv` and automatically creates `data.csv` (the price-adjusted version).
+2.  **Run Adjust (Mode 3)**: Use this anytime you want to re-scan for corporate actions (splits/bonuses). It ensures `data.csv` is mathematically accurate.
+3.  **Run Update (Mode 2)**: Use this daily to fetch the latest trading day's data and append it to your database.
+4.  **Analyze (Mode 4)**: The final step. Generates the signal `snapshot.csv`. You can toggle CPU-intensive **Chart Pattern Analysis** on or off here.
+
+### 3. Visualization & Filtering
+Once you have a snapshot CSV:
+-   **`formatter.py`**: Run this to generate a professional, color-coded Excel report of the entire market snapshot.
+-   **`screen_stocks.py`**: Run this on your snapshot to generate the Top 10 high-conviction picks for **Intraday** or **Swing** trading.
+-   **`sectoralanalysis.py`**: Identifies leading sectors and filters candidates based on institutional rotation.
+-   **`sma_filter.py`**: Finds stocks with tightening SMA setups.
+
+## 🚀 Project Components
 | Script | Description |
 | :--- | :--- |
 | `sectoralanalysis.py` | **The Master Strategy Bridge.** A proprietary Manual RRG engine that synthesizes sector indices, calculates multi-factor Rotational Scores, and enforces sector-specific trade filters. |
