@@ -1,6 +1,6 @@
 # NSE Stock Analyzer V5
 
-A comprehensive, institutional-grade technical analysis suite for the National Stock Exchange (NSE). V5 introduces advanced sector rotation modeling, structural chart pattern recognition, and Weinstein stage analysis to find high-conviction trading opportunities.
+A comprehensive, institutional-grade technical analysis suite for the National Stock Exchange (NSE). V5 introduces a proprietary Manual RRG engine, structural chart pattern recognition, and Weinstein stage analysis to identify high-conviction trading opportunities.
 
 # run requirements
 `pip install -r requirements.txt`
@@ -9,12 +9,12 @@ A comprehensive, institutional-grade technical analysis suite for the National S
 
 | Script | Description |
 | :--- | :--- |
-| `sectoralanalysis.py` | **The Master Strategy Bridge.** A proprietary Manual RRG engine that synthesizes sector indices, identifies institutional money flow, and calculates multi-factor Rotational Scores to filter swing candidates. |
-| `analyzer.py` | **The V5 Core Engine.** Handles data ingestion, split adjustments, and complex technical computation including **Structural Chart Pattern recognition** and **Weinstein Stage Analysis**. |
-| `formatter.py` | **The Visualization Engine.** Converts CSV snapshots to multi-sheet, color-coded Excel reports with professional heat-mapping. |
+| `sectoralanalysis.py` | **The Master Strategy Bridge.** A proprietary Manual RRG engine that synthesizes sector indices, calculates multi-factor Rotational Scores, and enforces sector-specific trade filters. |
+| `analyzer.py` | **The V5 Core Engine.** Handles data ingestion, split adjustments, and complex technical computation including **Structural Pattern recognition** and **Weinstein Stage Analysis**. |
+| `formatter.py` | **The Visualization Engine.** Converts snapshots to professional multi-sheet Excel reports with automated heat-mapping. |
 | `analyzerall.py` | Full-market version of the analyzer. Processes a larger set of symbols from `symbolsall.csv`. |
-| `screen_stocks.py` | **The Ranking Engine.** Applies multi-weighted scoring algorithms to snapshots to produce top-tier Intraday and Weekly Swing candidates. |
-| `sma_filter.py` | A utility to find stocks where multiple Simple Moving Averages (20, 50, 100, 200) are converging (confluence). |
+| `screen_stocks.py` | **The Ranking Engine.** Applies multi-weighted scoring algorithms to produce top-tier Intraday and Weekly Swing candidates. |
+| `sma_filter.py` | Utility to find stocks where multiple SMAs (20, 50, 100, 200) are converging (volatility confluence). |
 | `montecarlo.py` | **Risk Management.** Fetches live Nifty/VIX data to provide position sizing and Monte Carlo price simulations for professional options trading. |
 
 > Before running `montecarlo.py`, create and activate a Python virtual environment to keep dependencies isolated.
@@ -25,16 +25,16 @@ A comprehensive, institutional-grade technical analysis suite for the National S
 
 ## 🔄 Sector Rotation & RRG Analysis (`sectoralanalysis.py`)
 
-V5 places `sectoralanalysis.py` at the heart of the workflow. It acts as the sophisticated "Bridge" between raw market data and actionable swing trades. Unlike standard scanners, it uses a **Manual RRG (Relative Rotation Graph) Engine** to identify where institutional money is flowing.
+V5 places `sectoralanalysis.py` at the heart of the workflow. It acts as the "Bridge" between raw market data and actionable trades. Unlike standard scanners, it uses a **Manual RRG (Relative Rotation Graph) Engine** to identify where institutional money is flowing.
 
 ### Key Features:
 - **Index Synthesis**: Automatically builds equal-weighted sector indices directly from your local historical data (`data.csv`).
 - **Manual RRG Calculation**: Calculates **RS-Ratio** (trend) and **RS-Momentum** (velocity) against the Nifty 50 benchmark without needing external expensive data feeds.
 - **Rotational Scoring**: An institutional-grade multi-factor score (0-100) based on:
     - **RSI Breadth**: % of stocks in the sector with RSI >= 50.
-    - **EMA Breadth**: % of stocks trading above their 50-day EMA.
+    - **EMA Breadth**: % of stocks trading above their 50-day SMA.
     - **Delivery Conviction**: Average delivery percentage across the sector.
-    - **Heading Score**: Rewards sectors moving North-East towards the "Leading" quadrant.
+    - **Heading Score**: Rewards sectors accelerating North-East towards the "Leading" quadrant.
 - **Automatic Filtering**: Only permits swing candidates from "Leading" or "Improving" sectors, ensuring you are always trading with the wind at your back.
 
 ## 📈 V5 Structural Analysis Features
@@ -150,7 +150,7 @@ Run               : python screen_stocks.py [path/to/snapshot.csv]
 | **Swing** | Stage 2, wRSI 50-75, Delivery > 35%, ADX > 18 | Strong Trend (15), BB Squeeze (10), Supertrend (12), CMF (10) |
 
 ### 🟢 Excel Formatting (`formatter.py`)
-The formatter is designed to turn raw CSV data into a visually intuitive heat-map of market signals. It processes the snapshot files and applies conditional formatting based on technical consensus.
+The formatter is designed to turn raw CSV data into a visually intuitive heat-map of market signals. It processes snapshots and applies conditional formatting based on institutional technical consensus.
 
 **Usage:**
 1. **Manual**: `python formatter.py path/to/your_snapshot.csv`
@@ -175,7 +175,7 @@ The formatter is designed to turn raw CSV data into a visually intuitive heat-ma
 ## 📋 Requirements
 
 - Python 3.12+
-- `pandas`, `numpy`, `nselib`, `pandas-ta`, `scipy`, `plotly`, `streamlit`, `yfinance`, `requests`, `openpyxl`
+- `pandas`, `numpy`, `nselib`, `pandas-ta`, `scipy`, `plotly`, `streamlit`, `yfinance`, `requests`, `openpyxl`, `tqdm`
 
 ---
 *Disclaimer: This tool is for educational and analytical purposes only. Trading involves significant risk.*
