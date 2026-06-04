@@ -261,8 +261,9 @@ def colorize_snapshot(csv_path):
     # 5. Global Formatting Refinements
     for i, col in enumerate(ws.columns, 1):
         col_name = headers[i-1]
-        # Bold headers
+        # Bold headers and left align for better visibility when filter icons are present
         ws.cell(row=1, column=i).font = Font(bold=True)
+        ws.cell(row=1, column=i).alignment = Alignment(horizontal='left')
         # Number formatting
         if col_name == 'volu':
             for cell in col[1:]:
@@ -307,6 +308,10 @@ def colorize_snapshot(csv_path):
                                        showLastColumn=False, showRowStripes=False, showColumnStripes=False)
                 tab.tableStyleInfo = style
                 target_ws.add_table(tab)
+
+                # Left align headers to prevent filter buttons from obscuring the text
+                for cell in target_ws[1]:
+                    cell.alignment = Alignment(horizontal='left')
 
     wb.save(xlsx_path)
     print(f"Done! Excel file saved: {xlsx_path}")

@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.formatting.rule import ColorScaleRule, CellIsRule, FormulaRule
-from openpyxl.styles import PatternFill, Font
+from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
 
 # ─────────────────────────────────────────────────────────────
@@ -609,6 +609,8 @@ def apply_professional_formatting(file_path, df):
         ws.column_dimensions[col_letter].width = min(max_length + 2, 35)
         # Bold Headers
         ws.cell(row=1, column=i).font = Font(bold=True)
+        # Left align headers to prevent overlap with filter icons
+        ws.cell(row=1, column=i).alignment = Alignment(horizontal='left')
 
     wb.save(file_path)
 

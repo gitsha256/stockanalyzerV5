@@ -278,6 +278,10 @@ def apply_corporate_styling(file_path):
             tab.tableStyleInfo = style
             ws.add_table(tab)
 
+            # Left align headers for better readability when filter icons are active
+            for cell in ws[1]:
+                cell.alignment = Alignment(horizontal='left')
+
         # Column width auto-fit
         for col in ws.columns:
             max_length = 0
