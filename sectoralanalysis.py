@@ -2,10 +2,11 @@
 import os
 import sys
 import glob
+import re
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -304,73 +305,132 @@ def main():
     print("🚀 Swing Scanner Bridge v3.0 (Excel Output)")
     print("="*60)
 
-    # ── resolve CSV path ──
-    if len(sys.argv) > 1:
-        snapshot_path = sys.argv[1]
-    else:
-        # Sort files by modification time so the most recently created file is truly last
-        snapshot_files = sorted([f for f in os.listdir(".") if f.endswith("snapshot.csv") and not f.endswith("snapshot_all.csv")], key=os.path.getmtime)
-        snapshot_all_files = sorted([f for f in os.listdir(".") if f.endswith("snapshot_all.csv")], key=os.path.getmtime)
+    # 1. Ask for snapshot type
+    print("Choose snapshot source:")
+    print("1. snapshot.csv")
+    print("2. snapshot_all.csv")
+    choice = input("Enter choice [default 1]: ").strip()
 
-        if snapshot_files and snapshot_all_files:
-            print("Choose snapshot source:")
-            print("1. snapshot.csv")
-            print("2. snapshot_all.csv")
-            choice = input("Enter choice [default 1]: ").strip()
-            if choice == '2':
-                snapshot_path = snapshot_all_files[-1]
-            else:
-                snapshot_path = snapshot_files[-1]
-        elif snapshot_files:
-            snapshot_path = snapshot_files[-1]
-        elif snapshot_all_files:
-            snapshot_path = snapshot_all_files[-1]
-        else:
-            print("❌ No snapshot CSV found in current directory.")
+    if choice == '2':
+        suffix_flag = "_all"
+        pattern = "*snapshot_all.csv"
+    else:
+        suffix_flag = ""
+        pattern = "*snapshot.csv"
+
+    # 2. Ask for data target
+    print("\nOptions: press Enter to latest data, enter a specific date (DD-MM-YYYY),")
+    print("a range (DD-MM-YYYY to DD-MM-YYYY), or a custom filename.")
+    user_input = input("Target: ").strip()
+
+    targets = []
+
+    if not user_input:
+        all_files = glob.glob(pattern)
+        if choice != '2':
+            all_files = [f for f in all_files if not f.endswith("_all.csv")]
+        
+        # Filter for dated files only (ignores ma_ or sma_ prefixes)
+        files = [f for f in all_files if re.match(r"^\d{2}-\d{2}-\d{2,4}", os.path.basename(f))]
+        
+        if not files:
+            print(f"No files matching {pattern} found in current directory.")
             sys.exit(1)
 
-    print(f"\n📂 Loading files from {snapshot_path}...")
-    try:
-        snap    = load_snapshot(snapshot_path)
-        sectors = get_sector_rankings(snap, snapshot_path)
-    except Exception as e:
-        print(f"❌ Error during manual RRG calculation: {e}")
+        # Sort by the date embedded in the filename (DD-MM-YY)
+        def get_file_date(fname):
+            name = os.path.basename(fname)
+            try:
+                return datetime.strptime(name[:8], "%d-%m-%y")
+            except ValueError:
+                try:
+                    return datetime.strptime(name[:10], "%d-%m-%Y")
+                except ValueError:
+                    return datetime.fromtimestamp(0)
+
+        files.sort(key=get_file_date)
+        targets.append(files[-1])
+
+    elif "to" in user_input:
+        # Handle range
+        try:
+            start_str, end_str = [d.strip() for d in user_input.split('to')]
+            start_dt = datetime.strptime(start_str, '%d-%m-%Y')
+            end_dt = datetime.strptime(end_str, '%d-%m-%Y')
+            
+            curr = start_dt
+            while curr <= end_dt:
+                fname = f"{curr.strftime('%d-%m-%y')}snapshot{suffix_flag}.csv"
+                if os.path.exists(fname):
+                    targets.append(fname)
+                curr += timedelta(days=1)
+        except Exception as e:
+            print(f"Error parsing date range: {e}")
+            sys.exit(1)
+
+    elif os.path.exists(user_input):
+        targets.append(user_input)
+
+    else:
+        # Try as single date
+        try:
+            dt = datetime.strptime(user_input, '%d-%m-%Y')
+            fname = f"{dt.strftime('%d-%m-%y')}snapshot{suffix_flag}.csv"
+            if os.path.exists(fname):
+                targets.append(fname)
+            else:
+                print(f"File {fname} not found.")
+                sys.exit(1)
+        except ValueError:
+            print(f"Invalid input format or file not found: {user_input}")
+            sys.exit(1)
+
+    if not targets:
+        print("No valid snapshot files identified to process.")
         sys.exit(1)
 
-    print("\n📊 Sector RRG snapshot (darksoul):")
-    print(sectors[['Sector Name', 'RRG Quadrant', 'RS-Ratio',
-                   'RS-Momentum', 'Rotational Score']].to_string(index=False))
-    print("\n🔍 Filtering swing candidates...")
-    candidates, filter_steps = build_candidates(snap, sectors)
+    for snapshot_path in targets:
+        print(f"\n📂 Loading files from {snapshot_path}...")
+        try:
+            snap    = load_snapshot(snapshot_path)
+            sectors = get_sector_rankings(snap, snapshot_path)
+        except Exception as e:
+            print(f"❌ Error during manual RRG calculation for {snapshot_path}: {e}")
+            continue
 
-    # Determine output filename based on snapshot type
-    suffix = "_all" if snapshot_path.endswith("snapshot_all.csv") else ""
-    final_output_file = OUTPUT_FILE.replace(".xlsx", f"{suffix}.xlsx")
+        print("\n📊 Sector RRG snapshot (darksoul):")
+        print(sectors[['Sector Name', 'RRG Quadrant', 'RS-Ratio',
+                       'RS-Momentum', 'Rotational Score']].to_string(index=False))
+        print("\n🔍 Filtering swing candidates...")
+        candidates, filter_steps = build_candidates(snap, sectors)
 
-    # Write to Excel
-    print(f"\n💾 Compiling Master Report: {final_output_file}")
-    with pd.ExcelWriter(final_output_file, engine='openpyxl') as writer:
-        candidates.to_excel(writer, sheet_name="Swing Candidates", index=False)
-        sectors.to_excel(writer, sheet_name="Sector RRG Snapshot", index=False)
-        # Add bifurcated filter sheets
-        for sheet_name, step_df in filter_steps.items():
-            step_df.to_excel(writer, sheet_name=sheet_name, index=False)
-    
-    if candidates.empty:
-        print("\n⚠️  No final candidates today, but filter progression saved to Excel.")
-    else:
-        print(f"✅ {len(candidates)} candidates found.")
+        # Determine output filename based on snapshot filename to avoid overwrites
+        base_name_file = os.path.splitext(os.path.basename(snapshot_path))[0]
+        final_output_file = f"sector_report_{base_name_file}.xlsx"
 
-    apply_corporate_styling(final_output_file)
+        # Write to Excel
+        print(f"\n💾 Compiling Master Report: {final_output_file}")
+        with pd.ExcelWriter(final_output_file, engine='openpyxl') as writer:
+            candidates.to_excel(writer, sheet_name="Swing Candidates", index=False)
+            sectors.to_excel(writer, sheet_name="Sector RRG Snapshot", index=False)
+            # Add bifurcated filter sheets
+            for sheet_name, step_df in filter_steps.items():
+                step_df.to_excel(writer, sheet_name=sheet_name, index=False)
+        
+        if candidates.empty:
+            print("\n⚠️  No final candidates found, but filter progression saved to Excel.")
+        else:
+            print(f"✅ {len(candidates)} candidates found.")
 
-    today = datetime.now().strftime("%d-%b-%Y")
-    print(f"✅ {len(candidates)} candidates saved and styled.")
-    print(f"\n🏆 Top 10 — {today}:")
-    sect_col = 'sect'
-    print(candidates[['symb', sect_col,
-                       'RRG Quadrant', 'Rotational Score',
-                       'clos', 'rsi', 'adx', 'mpat']].head(10).to_string(index=False))
-    print("\n" + "="*60)
+        apply_corporate_styling(final_output_file)
+
+        print(f"✅ Report saved and styled: {final_output_file}")
+        print(f"\n🏆 Top 10 Candidates ({base_name_file}):")
+        sect_col = 'sect'
+        print(candidates[['symb', sect_col,
+                           'RRG Quadrant', 'Rotational Score',
+                           'clos', 'rsi', 'adx', 'mpat']].head(10).to_string(index=False))
+        print("\n" + "="*60)
      
 if __name__ == "__main__":
     main()

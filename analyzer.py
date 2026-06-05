@@ -1291,15 +1291,18 @@ def perform_technical_analysis(df_input, sector_df, logger, enable_chart_pattern
         analysis_df['RELATIVE_VOLUME_RANK'] = analysis_df['RELATIVE_VOLUME'].rank(ascending=False, method='min')
         analysis_df = analysis_df.sort_values(['ACTIVITY_SCORE', 'RELATIVE_VOLUME'], ascending=[False, False])
         
-        if not sector_df.empty:
-            try:
-                analysis_df['symbols'] = analysis_df['symbols'].astype(str)
+        # Ensure SECTOR column exists before mapping to 'sect'
+        try:
+            analysis_df['symbols'] = analysis_df['symbols'].astype(str)
+            if not sector_df.empty:
                 sector_df['symbols'] = sector_df['symbols'].astype(str)
-                analysis_df = analysis_df.merge(sector_df[['symbols', 'SECTOR']], on='symbols', how='left').fillna({'SECTOR': 'Unknown'})
-                cols = [c for c in analysis_df.columns if c != 'SECTOR'] + ['SECTOR']
-                analysis_df = analysis_df[cols]
-            except Exception as e:
-                logger.error(f"Error merging sector data: {e}")
+                analysis_df = analysis_df.merge(sector_df[['symbols', 'SECTOR']], on='symbols', how='left')
+            
+            if 'SECTOR' not in analysis_df.columns:
+                analysis_df['SECTOR'] = 'Unknown'
+            analysis_df['SECTOR'] = analysis_df['SECTOR'].fillna('Unknown')
+        except Exception as e:
+            logger.error(f"Error merging sector data: {e}")
         
         col_map = {
             'datetime': 'date', 'symbols': 'symb', 'close': 'clos', 'volume': 'volu',

@@ -3,7 +3,8 @@ import numpy as np
 import sys
 import os
 import re
-from datetime import datetime
+import glob
+from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -660,68 +661,122 @@ def print_logic_summary():
 # ─────────────────────────────────────────────
 def main():
     # ── resolve CSV path ──
-    if len(sys.argv) > 1:
-        csv_path = sys.argv[1]
+    # 1. Ask for snapshot type
+    print("Choose snapshot source:")
+    print("1. snapshot.csv")
+    print("2. snapshot_all.csv")
+    choice = input("Enter choice [default 1]: ").strip()
+
+    if choice == '2':
+        suffix_flag = "_all"
+        pattern = "*snapshot_all.csv"
     else:
-        # Sort files by modification time so the most recently created file is truly last
-        snapshot_files = sorted([f for f in os.listdir(".") if f.endswith("snapshot.csv") and not f.endswith("snapshot_all.csv")], key=os.path.getmtime)
-        snapshot_all_files = sorted([f for f in os.listdir(".") if f.endswith("snapshot_all.csv")], key=os.path.getmtime)
+        suffix_flag = ""
+        pattern = "*snapshot.csv"
 
-        if snapshot_files and snapshot_all_files:
-            print("Choose snapshot source:")
-            print("1. snapshot.csv")
-            print("2. snapshot_all.csv")
-            choice = input("Enter choice [default 1]: ").strip()
-            if choice == '2':
-                csv_path = snapshot_all_files[-1]
+    # 2. Ask for data target
+    print("\nOptions: press Enter to latest data, enter a specific date (DD-MM-YYYY),")
+    print("a range (DD-MM-YYYY to DD-MM-YYYY), or a custom filename.")
+    user_input = input("Target: ").strip()
+
+    targets = []
+
+    if not user_input:
+        all_files = glob.glob(pattern)
+        if choice != '2':
+            all_files = [f for f in all_files if not f.endswith("_all.csv")]
+        
+        files = [f for f in all_files if re.match(r"^\d{2}-\d{2}-\d{2,4}", os.path.basename(f))]
+
+        if not files:
+            print(f"No files matching {pattern} found in current directory.")
+            sys.exit(1)
+
+        # Sort by the date embedded in the filename (DD-MM-YY)
+        def get_file_date(fname):
+            name = os.path.basename(fname)
+            try:
+                return datetime.strptime(name[:8], "%d-%m-%y")
+            except ValueError:
+                try:
+                    return datetime.strptime(name[:10], "%d-%m-%Y")
+                except ValueError:
+                    return datetime.fromtimestamp(0)
+
+        files.sort(key=get_file_date)
+        targets.append(files[-1])
+
+    elif "to" in user_input:
+        # Handle range
+        try:
+            start_str, end_str = [d.strip() for d in user_input.split('to')]
+            start_dt = datetime.strptime(start_str, '%d-%m-%Y')
+            end_dt = datetime.strptime(end_str, '%d-%m-%Y')
+            
+            curr = start_dt
+            while curr <= end_dt:
+                fname = f"{curr.strftime('%d-%m-%y')}snapshot{suffix_flag}.csv"
+                if os.path.exists(fname):
+                    targets.append(fname)
+                curr += timedelta(days=1)
+        except Exception as e:
+            print(f"Error parsing date range: {e}")
+            sys.exit(1)
+
+    elif os.path.exists(user_input):
+        targets.append(user_input)
+
+    else:
+        # Try as single date
+        try:
+            dt = datetime.strptime(user_input, '%d-%m-%Y')
+            fname = f"{dt.strftime('%d-%m-%y')}snapshot{suffix_flag}.csv"
+            if os.path.exists(fname):
+                targets.append(fname)
             else:
-                csv_path = snapshot_files[-1]
-            print(f"[INFO] Using CSV: {csv_path}")
-        elif snapshot_files:
-            csv_path = snapshot_files[-1]
-            print(f"[INFO] Auto-detected CSV: {csv_path}")
-        elif snapshot_all_files:
-            csv_path = snapshot_all_files[-1]
-            print(f"[INFO] Auto-detected CSV: {csv_path}")
-        else:
-            sys.exit(
-                "[ERROR] No CSV path provided and no snapshot file found in current dir.\n"
-                "Usage: python screen_stocks.py <path_to/DD-MM-YYsnapshot.csv>"
-            )
+                print(f"File {fname} not found.")
+                sys.exit(1)
+        except ValueError:
+            print(f"Invalid input format or file not found: {user_input}")
+            sys.exit(1)
 
-    snap_date = parse_date_from_filename(csv_path)
-
-    df = load_csv(csv_path)
-    print(f"[INFO] Loaded {len(df)} stocks — snapshot date: {snap_date}")
+    if not targets:
+        print("No valid snapshot files identified to process.")
+        sys.exit(1)
 
     print_logic_summary()
 
-    # ── run screens ──
-    intraday_results, intraday_pool = screen_intraday(df, INTRADAY_CFG)
-    swing_results,   swing_pool    = screen_swing(df, SWING_CFG)
+    for csv_path in targets:
+        snap_date = parse_date_from_filename(csv_path)
+        df = load_csv(csv_path)
+        print(f"\n[INFO] Processing {csv_path} — snapshot date: {snap_date}")
 
-    print_section(f"INTRADAY CANDIDATES  [{snap_date}]",  intraday_results, intraday_pool)
-    print_section(f"WEEKLY SWING CANDIDATES  [{snap_date}]", swing_results, swing_pool)
+        # ── run screens ──
+        intraday_results, intraday_pool = screen_intraday(df, INTRADAY_CFG)
+        swing_results,   swing_pool    = screen_swing(df, SWING_CFG)
 
-    # ── dual-timeframe confluence ──
-    both = set(intraday_results["symb"]) & set(swing_results["symb"])
-    if both:
-        print(f"\n{'─'*70}")
-        print(f"  ⭐ DUAL-TIMEFRAME CONFLUENCE: {', '.join(sorted(both))}")
-        print(f"  Appear in BOTH lists — highest conviction picks.")
-        print(f"{'─'*70}")
+        print_section(f"INTRADAY CANDIDATES  [{snap_date}]",  intraday_results, intraday_pool)
+        print_section(f"WEEKLY SWING CANDIDATES  [{snap_date}]", swing_results, swing_pool)
 
-    # ── export ──
-    out_dir  = os.path.dirname(os.path.abspath(csv_path)) or "."
-    suffix = "_all" if os.path.basename(csv_path).endswith("snapshot_all.csv") else ""
-    base_name = f"picks_{snap_date.replace(' ', '_')}{suffix}"
-    
-    intraday_tagged = intraday_results.assign(screener_type="Intraday")
-    swing_tagged    = swing_results.assign(screener_type="Swing")
-    combined_df = pd.concat([intraday_tagged, swing_tagged], ignore_index=True)
+        # ── dual-timeframe confluence ──
+        both = set(intraday_results["symb"]) & set(swing_results["symb"])
+        if both:
+            print(f"\n{'─'*70}")
+            print(f"  ⭐ DUAL-TIMEFRAME CONFLUENCE: {', '.join(sorted(both))}")
+            print(f"  Appear in BOTH lists — highest conviction picks.")
+            print(f"{'─'*70}")
 
-    apply_professional_formatting(os.path.join(out_dir, f"{base_name}.xlsx"), combined_df)
-    print(f"\n[INFO] Results saved → {base_name}.xlsx (Formatted)")
+        # ── export ──
+        out_dir  = os.path.dirname(os.path.abspath(csv_path)) or "."
+        suffix = "_all" if os.path.basename(csv_path).endswith("snapshot_all.csv") else ""
+        base_name = f"picks_{snap_date.replace(' ', '_')}{suffix}"
+        
+        intraday_tagged = intraday_results.assign(screener_type="Intraday")
+        swing_tagged    = swing_results.assign(screener_type="Swing")
+        combined_df = pd.concat([intraday_tagged, swing_tagged], ignore_index=True)
+
+        apply_professional_formatting(os.path.join(out_dir, f"{base_name}.xlsx"), combined_df)
+        print(f"[INFO] Results saved → {base_name}.xlsx (Formatted)")
 
 
 if __name__ == "__main__":

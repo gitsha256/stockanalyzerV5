@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import sys
 import glob
+from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.formatting.rule import ColorScaleRule, CellIsRule, FormulaRule
@@ -317,29 +318,87 @@ def colorize_snapshot(csv_path):
     print(f"Done! Excel file saved: {xlsx_path}")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        target = sys.argv[1]
-    else:
-        # Sort by OS modification time to ensure we actually get the most recently created file
-        snapshot_files = sorted(glob.glob("*snapshot.csv"), key=os.path.getmtime)
-        snapshot_all_files = sorted(glob.glob("*snapshot_all.csv"), key=os.path.getmtime)
-        # Filter out 'all' snapshots from the standard list to avoid duplicates
-        snapshot_files = [f for f in snapshot_files if not f.endswith("_all.csv")]
+    # 1. Ask for snapshot type
+    print("Choose snapshot source:")
+    print("1. snapshot.csv")
+    print("2. snapshot_all.csv")
+    choice = input("Enter choice [default 1]: ").strip()
 
-        if snapshot_files and snapshot_all_files:
-            print("Choose snapshot source:")
-            print("1. snapshot.csv")
-            print("2. snapshot_all.csv")
-            choice = input("Enter choice [default 1]: ").strip()
-            if choice == '2':
-                target = snapshot_all_files[-1]
-            else:
-                target = snapshot_files[-1]
-        elif snapshot_files:
-            target = snapshot_files[-1]
-        elif snapshot_all_files:
-            target = snapshot_all_files[-1]
-        else:
-            print("No snapshot CSV found in current directory.")
+    if choice == '2':
+        suffix = "_all"
+        pattern = "*snapshot_all.csv"
+    else:
+        suffix = ""
+        pattern = "*snapshot.csv"
+
+    # 2. Ask for data target
+    print("\nOptions: press Enter to latest data, enter a specific date (DD-MM-YYYY),")
+    print("a range (DD-MM-YYYY to DD-MM-YYYY), or a custom filename.")
+    user_input = input("Target: ").strip()
+
+    targets = []
+
+    if not user_input:
+        # Get all matching files
+        files = glob.glob(pattern)
+        if choice != '2':
+            files = [f for f in files if not f.endswith("_all.csv")]
+        
+        if not files:
+            print(f"No files matching {pattern} found in current directory.")
             sys.exit(1)
-    colorize_snapshot(target)
+
+        # Sort by the date embedded in the filename (DD-MM-YY)
+        def get_file_date(fname):
+            name = os.path.basename(fname)
+            try:
+                return datetime.strptime(name[:8], "%d-%m-%y")
+            except ValueError:
+                try:
+                    return datetime.strptime(name[:10], "%d-%m-%Y")
+                except ValueError:
+                    return datetime.fromtimestamp(0)
+
+        files.sort(key=get_file_date)
+        targets.append(files[-1])
+
+    elif "to" in user_input:
+        # Handle range
+        try:
+            start_str, end_str = [d.strip() for d in user_input.split('to')]
+            start_dt = datetime.strptime(start_str, '%d-%m-%Y')
+            end_dt = datetime.strptime(end_str, '%d-%m-%Y')
+            
+            curr = start_dt
+            while curr <= end_dt:
+                fname = f"{curr.strftime('%d-%m-%y')}snapshot{suffix}.csv"
+                if os.path.exists(fname):
+                    targets.append(fname)
+                curr += timedelta(days=1)
+        except Exception as e:
+            print(f"Error parsing date range: {e}")
+            sys.exit(1)
+
+    elif os.path.exists(user_input):
+        targets.append(user_input)
+
+    else:
+        # Try as single date
+        try:
+            dt = datetime.strptime(user_input, '%d-%m-%Y')
+            fname = f"{dt.strftime('%d-%m-%y')}snapshot{suffix}.csv"
+            if os.path.exists(fname):
+                targets.append(fname)
+            else:
+                print(f"File {fname} not found.")
+                sys.exit(1)
+        except ValueError:
+            print(f"Invalid input format or file not found: {user_input}")
+            sys.exit(1)
+
+    if not targets:
+        print("No valid snapshot files identified to process.")
+        sys.exit(1)
+
+    for t in targets:
+        colorize_snapshot(t)
