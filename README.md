@@ -116,6 +116,7 @@ The analysis outputs (e.g., `29-05-26snapshot_all.csv`) use the following column
 
 ### Trend & Stage Analysis
 - **stge**: Weinstein Stage (Stage 1: Base, Stage 2: Uptrend, Stage 3: Top, Stage 4: Downtrend).
+- **stge_w**: Weekly Weinstein Stage — stage classification computed on weekly resampled bars. Alignment of stge + stge_w = strongest signal.
 - **tren**: Trend Direction (Uptrend, Sideways, Downtrend).
 - **tstr**: Trend Strength (Strong, Moderate, Weak).
 - **zone**: Price Location (Premium, Near Premium, Equilibrium, Near Discount, Discount).

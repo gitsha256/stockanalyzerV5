@@ -78,6 +78,7 @@ SWING_CFG = {
     "w_bbbw_low":       20.0,   # reward low bbbw (compressed volatility)
     "w_mtf_align":      8.0,    # dual timeframe momentum bonus
     "w_weak_penalty":   -12.0,  # penalty for weak trend
+    "w_weekly_stage_align": 10.0, # adds bonus for MTF Weinstein confluence
 
     # ── New indicator weights ──
     "w_supertrend":     12.0,   # bonus: SUPERTd == +1  (multi-day confirmation)
@@ -247,6 +248,10 @@ def screen_intraday(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, int]:
 
     # ── Weak Trend Penalty ──
     pool["score"] += (pool["tstr"] == "Weak").astype(int) * c["w_weak_penalty"]
+
+    # ── Weekly Stage Alignment ──
+    if "stge_w" in pool.columns:
+        pool["score"] += (pool["stge_w"] == "Stage 2 (Uptrend)").astype(int) * c.get("w_weekly_stage_align", 0)
 
     # ── new indicator scores ──
     if "SUPERTd_7_3.0" in pool.columns:

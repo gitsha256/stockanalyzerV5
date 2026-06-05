@@ -117,7 +117,7 @@ def add_indicators(df):
         print(f"Warning: RSI failed: {e}")
 
     try:
-        for length in [20, 50, 100, 200]:
+        for length in [20, 30, 50, 100, 200]:
             df.ta.sma(length=length, append=True)
     except Exception as e:
         print(f"Warning: SMA failed: {e}")
@@ -1124,7 +1124,7 @@ def analyze_symbol(symbol, logger, enable_chart_patterns=True):
         data['VOLUME_SPIKE'] = data['RELATIVE_VOLUME'] > 2
         data['ACTIVITY_SCORE'] = data['close'] * data['volume'] / 1e7
 
-        # --- WEEKLY ANALYSIS FOR SWING TRADING ---
+        # --- WEEKLY ANALYSIS AND WEINSTEIN STAGE ---
         weekly_df = data.resample('W-FRI', on='datetime').agg({
             'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
         }).dropna()
@@ -1134,20 +1134,35 @@ def analyze_symbol(symbol, logger, enable_chart_patterns=True):
             w_rsi = weekly_df['RSI_14'].iloc[-1] if len(weekly_df) >= 14 else np.nan
         except Exception:
             w_rsi = np.nan
-        w_sma30 = weekly_df['close'].rolling(window=30).mean().iloc[-1] if len(weekly_df) >= 30 else np.nan
-        w_sma30_prev = weekly_df['close'].rolling(window=30).mean().iloc[-5] if len(weekly_df) >= 35 else np.nan
         
-        # Stage Analysis (Weinstein Method)
-        w_close = weekly_df['close'].iloc[-1]
-        if pd.notna(w_sma30) and pd.notna(w_sma30_prev):
-            if w_close > w_sma30 and w_sma30 > w_sma30_prev:
-                swing_stage = "Stage 2 (Uptrend)"
-            elif w_close < w_sma30 and w_sma30 < w_sma30_prev:
-                swing_stage = "Stage 4 (Downtrend)"
-            else:
-                swing_stage = "Stage 1/3 (Neutral)"
-        else:
-            swing_stage = "Unknown"
+        w_sma30_s = weekly_df['close'].rolling(window=30).mean()
+        w_sma30 = w_sma30_s.iloc[-1] if len(weekly_df) >= 30 else np.nan
+
+        def calculate_weinstein_stage(df_p, sma_col, rsi_col):
+            if len(df_p) < 35: return "Insufficient Data"
+            curr, prev = df_p.iloc[-1], df_p.iloc[-4]
+            c, s, sp, r = curr['close'], curr[sma_col], prev[sma_col], curr[rsi_col]
+            if pd.isna(s) or pd.isna(sp) or pd.isna(r): return "Insufficient Data"
+            slope = (s - sp) / sp * 100
+            if c > s and slope > 0 and r >= 50: return "Stage 2 (Uptrend)"
+            if c < s and slope < 0 and r < 50: return "Stage 4 (Downtrend)"
+            if abs(c - s) / s <= 0.03 and abs(slope) < 0.5 and 40 <= r <= 60: return "Stage 1 (Base)"
+            if c <= s * 1.03 and slope < 0 and 45 <= r <= 65: return "Stage 3 (Top)"
+            return "Stage 1 (Base)"
+
+        # Daily Weinstein Stage (stge)
+        data['SMA_30'] = data['close'].rolling(window=30).mean()
+        swing_stage = calculate_weinstein_stage(data, 'SMA_30', 'RSI')
+
+        # Weekly Weinstein Stage (stge_w)
+        try:
+            w_df_stage = weekly_df.copy()
+            w_df_stage['SMA_30'] = w_sma30_s
+            if data['datetime'].max().weekday() != 4: # Drop incomplete week if not Friday
+                w_df_stage = w_df_stage.iloc[:-1]
+            weekly_stage = calculate_weinstein_stage(w_df_stage, 'SMA_30', 'RSI_14')
+        except:
+            weekly_stage = "Insufficient Data"
 
         latest = data.iloc[-1]
         close = latest['close']
@@ -1233,7 +1248,8 @@ def analyze_symbol(symbol, logger, enable_chart_patterns=True):
             'VOLATILITY_%': round(volatility, 2), 'S_HIGH': round(swing_high, 2),
             'S_LOW': round(swing_low, 2), 'high': round(latest['high'], 2), 'low': round(latest['low'], 2),
             'EQB': round(midpoint, 2),
-            'W_RSI': round(w_rsi, 2), 'W_SMA30': round(w_sma30, 2), 'STAGE': swing_stage,
+            'W_RSI': round(w_rsi, 2), 'W_SMA30': round(w_sma30, 2), 
+            'STAGE': swing_stage, 'STAGE_W': weekly_stage,
             'RELATIVE_VOLUME': round(latest['RELATIVE_VOLUME'], 2), 'VOLUME_SPIKE': latest['VOLUME_SPIKE'],
             'ACTIVITY_SCORE': round(latest['ACTIVITY_SCORE'], 2), 'SMA20': round(latest['SMA_20'], 2),
             'SMA50': round(latest['SMA_50'], 2), 'SMA100': round(latest['SMA_100'], 2),
@@ -1307,7 +1323,8 @@ def perform_technical_analysis(df_input, sector_df, logger, enable_chart_pattern
         col_map = {
             'datetime': 'date', 'symbols': 'symb', 'close': 'clos', 'volume': 'volu',
             'Dl Per': 'DlPer', 'RELATIVE_VOLUME': 'rvol', 'VOLUME_SPIKE': 'vspk', 'ACTIVITY_SCORE': 'ascr',
-            'ACTIVITY_RANK': 'arnk', 'CHANGE': 'chan', '>200': 'g200', 'ZONE': 'zone', 'MT_ZONE': 'MT_Zone', 'RSI': 'rsi',
+            'ACTIVITY_RANK': 'arnk', 'CHANGE': 'chan', '>200': 'g200', 'ZONE': 'zone', 
+            'STAGE_W': 'stge_w', 'RSI': 'rsi',
             'delta': 'delt', 'OBV': 'obv', 'BB_BREAKOUT_UP': 'bbup', 'VOLUME_TREND': 'vtrd',
             'BB_BANDWIDTH': 'bbbw', '>50': 'g050', '>20': 'g020', 'ADX': 'adx',
             'open': 'open', 'BB_BREAKOUT_DOWN': 'bbdn', 'BB_SQUEEZE': 'bbsq', 'S_HIGH': 'shgh', 'S_LOW': 'slw',
@@ -1322,7 +1339,7 @@ def perform_technical_analysis(df_input, sector_df, logger, enable_chart_pattern
         analysis_df.rename(columns={k: v for k, v in col_map.items() if k in analysis_df.columns}, inplace=True)
         
         desired_order = [
-            'date','symb','clos','stge','wrsi','ws30','volu','DlPer','rvol','vspk','ascr','arnk','chan','g200','zone','MT_Zone','rsi','delt','bbup','vtrd','bbbw','bbsq',
+            'date','symb','clos','stge','stge_w','wrsi','ws30','volu','DlPer','rvol','vspk','ascr','arnk','chan','g200','zone','rsi','delt','bbup','vtrd','bbbw','bbsq',
             'g050','g020','adx','CMF_20','SUPERT_7_3.0','SUPERTd_7_3.0','STOCHk_14_3_3','STOCHd_14_3_3','EMA_21','SQZ_ON','SQZ_OFF','SQZ_NO','WILLR_14','EFI_13','RSI_2','open','bbdn','shgh','slw','high','low','eqb','s020','s050','s100','s200','h52h','l52l','vrnk','rrnk',
             'tren','tstr','vola','mpat','pcon','psta','pend','ppnt','xpat','patt','obv','sect'
         ]
